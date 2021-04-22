@@ -1,4 +1,5 @@
-import pygame
+import pygame as pg
+from pygame.math import Vector2
 from random import random
 
 BLACK = 0, 0, 0
@@ -7,152 +8,171 @@ GREEN = 0, 255, 0
 RED = 255, 0, 0
 GREY = 222, 222, 222
 
-
 class Game:
+    
+    class Fruit:
+        
+        radius = 8
+        color = RED
+        
+        def __init__(self, position):
+            self.position = position
 
-    class Vector:
-        def __init__(self, x=0, y=0):
-            if isinstance(x, tuple):
-                self.x = x[0]
-                self.y = x[1]
-            else:
-                self.x = x
-                self.y = y
+        def get_correct_position(self):
+            return self.position * Game.block_size + Vector2(Game.block_size, Game.block_size) // 2
+        
+            
+    class Snake:
+        
+        snake_block_size = 18
+        directions = {
+            pg.K_UP: Vector2(0, -1),
+            pg.K_LEFT: Vector2(-1, 0),
+            pg.K_DOWN: Vector2(0, 1),
+            pg.K_RIGHT: Vector2(1, 0),
+        }
+        
+        def __init__ (self, position):
+            self.snake_body = [position]
+            self.direction = Vector2(0, 0)
 
-        def __add__(self, other):
-            if isinstance(other, Game.Vector):
-                return Game.Vector(self.x + other.x, self.y + other.y)
-            return Game.Vector(self.x + other, self.y + other)
+        def get_head(self):
+            return self.snake_body[0]
+        
+        def get_tail(self):
+            return self.snake_body[1:]
+        
+        def append_last_bodypart(self):
+            self.snake_body.append(self.snake_body[-1])
+        
+        def set_direction(self, action):
+            self.direction = directions[action]
+            
+        def correct_head_position(self, board_size):
+            self.snake_body[0] += board_size
+            self.snake_body[0].x %= board_size.x
+            self.snake_body[0].y %= board_size.y
+        
+        def make_move(self, board_size):
+            new_head = self.get_head() + self.direction
+            self.snake_body.insert(0, new_head)
+            self.snake_body.pop()
+            self.correct_head_position(board_size)
+            
+        def get_position_shift(self):
+            shift = (Game.block_size - self.snake_block_size) // 2
+            return Vector2(shift, shift)
 
-        def __sub__(self, other):
-            if isinstance(other, Game.Vector):
-                return Game.Vector(self.x - other.x, self.y - other.y)
-            return Game.Vector(self.x - other, self.y - other)
 
-        def __mod__(self, other):
-            if isinstance(other, Game.Vector):
-                return Game.Vector(self.x % other.x, self.y % other.y)
-            return Game.Vector(self.x % other, self.y % other)
-
-        def __mul__(self, other):
-            if isinstance(other, Game.Vector):
-                return Game.Vector(self.x * other.x, self.y * other.y)
-            return Game.Vector(self.x * other, self.y * other)
-
-        def __eq__(self, other):
-            if not isinstance(other, Game.Vector):
-                return NotImplemented
-            return self.x == other.x and self.y == other.y
-
-        def tup(self):
-            return self.x, self.y
-
-    BLOCK_SIZE = 20
-    FRUIT_SIZE = 8
-    SNAKE_BLOCK_SIZE = 18
-    START_POS = Vector(10, 10)
-    fruit_pos = Vector()
-    direction = Vector()
+    running = True
+    block_size = 20
+    number_of_obstacles = 10
     points = 0
-    speed = 100
-    NUMBER_OF_OBSTACLES = 10
-    keys = {
-        pygame.K_UP: Vector(0, -1),
-        pygame.K_LEFT: Vector(-1, 0),
-        pygame.K_DOWN: Vector(0, 1),
-        pygame.K_RIGHT: Vector(1, 0),
-    }
+    speed = 100  
     obstacles = []
-    snake = [START_POS]
 
     def __init__(self, size):
-        pygame.init()
-        pygame.display.set_caption("SNAKE")
-        self.font = pygame.font.SysFont("monospace", 28)
-        self.SIZE = self.WIDTH, self.HEIGHT = size
-        screen_size = Game.Vector(self.SIZE) * self.BLOCK_SIZE
-        self.screen = pygame.display.set_mode(screen_size.tup())
-
-    def move_snake(self):
-        new_head = self.snake[0] + self.direction
-        new_head %= Game.Vector(self.SIZE)
-        del self.snake[-1]
-        self.snake.insert(0, new_head)
+        pg.init()
+        pg.display.set_caption("SNAKE")
+        self.font = pg.font.SysFont("monospace", 28)
+        self.size = Vector2(size) 
+        screen_size = self.size * self.block_size
+        self.screen = pg.display.set_mode((int(screen_size.x), int(screen_size.y)))
+        self.snake = None
+        self.fruit = None
+        
+    def generate_random_position(self):
+        x = int(random() * self.size.x)
+        y = int(random() * self.size.y)
+        return Vector2(x, y)
 
     def draw_snake(self):
-        shift = (self.BLOCK_SIZE - self.SNAKE_BLOCK_SIZE) // 2
-        snake_part_size = (self.SNAKE_BLOCK_SIZE, self.SNAKE_BLOCK_SIZE)
-        for snake_part in self.snake:
-            snake_part_pos = snake_part * self.BLOCK_SIZE + shift
-            snake_part_rect = pygame.Rect(snake_part_pos.tup(), snake_part_size)
-            pygame.draw.rect(self.screen, GREEN, snake_part_rect)
-
-    def get_rand_fruit_coords(self):
-        x = int(random() * self.WIDTH)
-        y = int(random() * self.HEIGHT)
-        return Game.Vector(x, y)
-
-    def generate_fruit_pos(self):
-        fruit_coords = self.get_rand_fruit_coords()
-        not_allowed_positions = self.snake + self.obstacles
-        while fruit_coords in not_allowed_positions:
-            fruit_coords = self.get_rand_fruit_coords()
-        self.fruit_pos = fruit_coords
+        shift = self.snake.get_position_shift()
+        snake_part_size = Vector2(self.snake.snake_block_size, self.snake.snake_block_size)
+        for snake_part in self.snake.snake_body:
+            snake_part_pos = snake_part * self.block_size + shift
+            snake_part_rect = pg.Rect(snake_part_pos, snake_part_size)
+            pg.draw.rect(self.screen, GREEN, snake_part_rect)
 
     def draw_fruit(self):
-        fruit_position = self.fruit_pos * self.BLOCK_SIZE + self.BLOCK_SIZE // 2
-        pygame.draw.circle(self.screen, RED, fruit_position.tup(), self.FRUIT_SIZE)
+        fruit_position = self.fruit.get_correct_position()
+        pg.draw.circle(self.screen, self.fruit.color, fruit_position, self.fruit.radius)
 
     def generate_obstacles(self):
-        while len(self.obstacles) < self.NUMBER_OF_OBSTACLES:
-            x = int(random() * self.WIDTH)
-            y = int(random() * self.HEIGHT)
-            rand_pos = Game.Vector(x, y)
-            if rand_pos not in [self.START_POS, self.fruit_pos] + self.obstacles:
-                self.obstacles.append(rand_pos)
+        while len(self.obstacles) < self.number_of_obstacles:
+            obstacle = self.generate_random_position()
+            if obstacle not in self.obstacles:
+                self.obstacles.append(obstacle)
 
     def draw_obstacles(self):
         for obstacle in self.obstacles:
-            obstacle_pos = obstacle * self.BLOCK_SIZE
-            obstacle_size = (self.BLOCK_SIZE, self.BLOCK_SIZE)
-            obstacle_rect = pygame.Rect(obstacle_pos.tup(), obstacle_size)
-            pygame.draw.rect(self.screen, GREY, obstacle_rect)
+            obstacle_size = Vector2(self.block_size, self.block_size)
+            obstacle_rect = pg.Rect(obstacle  * self.block_size, obstacle_size)
+            pg.draw.rect(self.screen, GREY, obstacle_rect)
 
     def draw_points(self):
         label = self.font.render("SCORE: " + str(self.points), 1, WHITE)
-        self.screen.blit(label, (5, 5))
+        self.screen.blit(label, Vector2(5, 5))
+        
+    def gen_fruit_position(self):
+        pos = self.generate_random_position()
+        while pos in self.obstacles + self.snake.snake_body:
+            pos = self.generate_random_position()
+        return pos
+        
+    def gen_snake(self):
+        pos = self.generate_random_position()
+        while pos in self.obstacles:
+            pos = self.generate_random_position()
+        self.snake = self.Snake(pos)
+    
+    def gen_fruit(self):
+        pos = self.gen_fruit_position()
+        self.fruit = self.Fruit(pos)
 
     def fruit_collision(self):
-        if self.fruit_pos == self.snake[0]:
+        if self.fruit.position == self.snake.get_head():
             self.points += 50
             self.speed -= 1
-            self.generate_fruit_pos()
-            self.snake.append(self.snake[-1])
+            self.fruit.position = self.gen_fruit_position()
+            self.snake.append_last_bodypart()
+            
+    def deadly_collision(self):
+        if self.snake.get_head() in self.snake.get_tail() + self.obstacles:
+            self.running = False
+
+    def handle_events(self):
+        for event in pg.event.get():
+            if event.type == pg.QUIT:
+                self.running = False
+            if event.type == pg.KEYDOWN:
+                if event.key in self.snake.directions and self.snake.directions[event.key] != self.snake.direction * -1:
+                    self.snake.direction = self.snake.directions[event.key]
+                    break
+                
+    def init_game(self):
+        self.generate_obstacles()
+        self.gen_snake()
+        self.gen_fruit()
+
+    def game_update(self):
+        self.fruit_collision()
+        self.draw_snake()
+        self.draw_obstacles()
+        self.snake.make_move(self.size)
+        self.draw_fruit()
+        self.deadly_collision()
+        self.draw_points()
 
     def run(self):
-        self.generate_fruit_pos()
-        self.generate_obstacles()
-        running = True
-        while running:
-            for event in pygame.event.get():
-                if event.type == pygame.QUIT:
-                    running = False
-                if event.type == pygame.KEYDOWN:
-                    if event.key in self.keys and self.keys[event.key] != self.direction * -1:
-                        self.direction = self.keys[event.key]
-                        break
+        self.init_game()
+        while self.running:
+            self.handle_events()
             self.screen.fill(BLACK)
-            self.fruit_collision()
-            self.draw_obstacles()
-            self.move_snake()
-            if self.snake[0] in self.snake[1:] + self.obstacles:
-                running = False
-            self.draw_fruit()
-            self.draw_snake()
-            self.draw_points()
-            pygame.display.flip()
-            pygame.time.wait(max(self.speed, 50))
-        pygame.quit()
+            self.game_update()
+            pg.display.flip()
+            pg.time.wait(max(self.speed, 50))
+        pg.quit()
 
 
 SIZE = 30, 30
