@@ -2,6 +2,10 @@ import pygame as pg
 from pygame.math import Vector2
 from random import random
 
+BLACK = 0, 0, 0
+WHITE = 255, 255, 255
+GREY = 222, 222, 222
+
 class Game:
     
     class Fruit:
@@ -88,10 +92,6 @@ class Game:
     points = 0
     speed = 100  
     obstacles = []
-    
-    BLACK = 0, 0, 0
-    WHITE = 255, 255, 255
-    GREY = 222, 222, 222
 
     def __init__(self, size):
         pg.init()
@@ -173,6 +173,7 @@ class Game:
         pg.quit()
 
 
-SIZE = 30, 30
-game = Game(SIZE)
-game.run()
+if __name__ == "__main__":
+    SIZE = 30, 30
+    game = Game(SIZE)
+    game.run()
