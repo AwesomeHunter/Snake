@@ -2,28 +2,33 @@ import pygame as pg
 from pygame.math import Vector2
 from random import random
 
-BLACK = 0, 0, 0
-WHITE = 255, 255, 255
-GREEN = 0, 255, 0
-RED = 255, 0, 0
-GREY = 222, 222, 222
-
 class Game:
     
     class Fruit:
         
         radius = 8
-        color = RED
+        color = 255, 0, 0
         
-        def __init__(self, position):
-            self.position = position
+        def __init__(self):
+            self.position = None
 
         def get_correct_position(self):
             return self.position * Game.block_size + Vector2(Game.block_size, Game.block_size) // 2
         
+        def occupied(self):
+            return [self.position]
+        
+        def set_position(self, pos):
+            self.position = pos
+        
+        def draw(self, screen):
+            position = self.get_correct_position()
+            pg.draw.circle(screen, self.color, position, self.radius)
             
+                
     class Snake:
         
+        color = 0, 255, 0
         snake_block_size = 18
         directions = {
             pg.K_UP: Vector2(0, -1),
@@ -32,8 +37,8 @@ class Game:
             pg.K_RIGHT: Vector2(1, 0),
         }
         
-        def __init__ (self, position):
-            self.snake_body = [position]
+        def __init__ (self):
+            self.snake_body = []
             self.direction = Vector2(0, 0)
 
         def get_head(self):
@@ -62,79 +67,75 @@ class Game:
         def get_position_shift(self):
             shift = (Game.block_size - self.snake_block_size) // 2
             return Vector2(shift, shift)
+        
+        def set_init_position(self, pos):
+            self.snake_body = [pos]
+            
+        def occupied(self):
+            return self.snake_body
+        
+        def draw(self, screen):
+            shift = self.get_position_shift()
+            snake_part_size = Vector2(self.snake_block_size, self.snake_block_size)
+            for snake_part in self.snake_body:
+                snake_part_pos = snake_part * Game.block_size + shift
+                snake_part_rect = pg.Rect(snake_part_pos, snake_part_size)
+                pg.draw.rect(screen, self.color, snake_part_rect)
 
 
-    running = True
     block_size = 20
     number_of_obstacles = 10
     points = 0
     speed = 100  
     obstacles = []
+    
+    BLACK = 0, 0, 0
+    WHITE = 255, 255, 255
+    GREY = 222, 222, 222
 
     def __init__(self, size):
         pg.init()
-        pg.display.set_caption("SNAKE")
+        pg.display.set_caption("Snake")
         self.font = pg.font.SysFont("monospace", 28)
         self.size = Vector2(size) 
         screen_size = self.size * self.block_size
         self.screen = pg.display.set_mode((int(screen_size.x), int(screen_size.y)))
-        self.snake = None
-        self.fruit = None
-        
+        self.running = True
+        self.snake = self.Snake()
+        self.fruit = self.Fruit()
+    
     def generate_random_position(self):
         x = int(random() * self.size.x)
         y = int(random() * self.size.y)
         return Vector2(x, y)
-
-    def draw_snake(self):
-        shift = self.snake.get_position_shift()
-        snake_part_size = Vector2(self.snake.snake_block_size, self.snake.snake_block_size)
-        for snake_part in self.snake.snake_body:
-            snake_part_pos = snake_part * self.block_size + shift
-            snake_part_rect = pg.Rect(snake_part_pos, snake_part_size)
-            pg.draw.rect(self.screen, GREEN, snake_part_rect)
-
-    def draw_fruit(self):
-        fruit_position = self.fruit.get_correct_position()
-        pg.draw.circle(self.screen, self.fruit.color, fruit_position, self.fruit.radius)
+    
+    def generate_correct_position(self):
+        not_available = self.snake.occupied() + self.fruit.occupied() + self.obstacles
+        pos = self.generate_random_position()
+        while pos in not_available:
+            pos = self.generate_random_position()
+        return pos
 
     def generate_obstacles(self):
         while len(self.obstacles) < self.number_of_obstacles:
-            obstacle = self.generate_random_position()
-            if obstacle not in self.obstacles:
-                self.obstacles.append(obstacle)
+            obstacle = self.generate_correct_position()
+            self.obstacles.append(obstacle)
 
     def draw_obstacles(self):
         for obstacle in self.obstacles:
             obstacle_size = Vector2(self.block_size, self.block_size)
             obstacle_rect = pg.Rect(obstacle  * self.block_size, obstacle_size)
             pg.draw.rect(self.screen, GREY, obstacle_rect)
-
+            
     def draw_points(self):
         label = self.font.render("SCORE: " + str(self.points), 1, WHITE)
         self.screen.blit(label, Vector2(5, 5))
-        
-    def gen_fruit_position(self):
-        pos = self.generate_random_position()
-        while pos in self.obstacles + self.snake.snake_body:
-            pos = self.generate_random_position()
-        return pos
-        
-    def gen_snake(self):
-        pos = self.generate_random_position()
-        while pos in self.obstacles:
-            pos = self.generate_random_position()
-        self.snake = self.Snake(pos)
-    
-    def gen_fruit(self):
-        pos = self.gen_fruit_position()
-        self.fruit = self.Fruit(pos)
 
     def fruit_collision(self):
-        if self.fruit.position == self.snake.get_head():
+        if self.snake.get_head() in self.fruit.occupied():
             self.points += 50
             self.speed -= 1
-            self.fruit.position = self.gen_fruit_position()
+            self.fruit.set_position(self.generate_correct_position())
             self.snake.append_last_bodypart()
             
     def deadly_collision(self):
@@ -149,23 +150,20 @@ class Game:
                 if event.key in self.snake.directions and self.snake.directions[event.key] != self.snake.direction * -1:
                     self.snake.direction = self.snake.directions[event.key]
                     break
-                
-    def init_game(self):
-        self.generate_obstacles()
-        self.gen_snake()
-        self.gen_fruit()
 
     def game_update(self):
-        self.fruit_collision()
-        self.draw_snake()
-        self.draw_obstacles()
         self.snake.make_move(self.size)
-        self.draw_fruit()
+        self.snake.draw(self.screen)
+        self.draw_obstacles()
         self.deadly_collision()
+        self.fruit_collision()
+        self.fruit.draw(self.screen)
         self.draw_points()
 
     def run(self):
-        self.init_game()
+        self.generate_obstacles()
+        self.snake.set_init_position(self.generate_correct_position())
+        self.fruit.set_position(self.generate_correct_position())
         while self.running:
             self.handle_events()
             self.screen.fill(BLACK)
